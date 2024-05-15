@@ -1,0 +1,64 @@
+<Project>
+    <PropertyGroup>
+        <ContinuousIntegration Condition="'$(CI)' == 'true' or '$(BuildFromGameLibs)' == 'true'">true</ContinuousIntegration>
+    </PropertyGroup>
+
+    <!-- Locates the Managed Folder based off base game directory -->
+    <Target Name="FindManagedFolder" Condition="'$(ContinuousIntegration)' != 'true'">
+        <!-- Find all "Managed" directories under the GameFiles directory -->
+        <CreateProperty Value="$([System.String]::Join(';', $([System.IO.Directory]::GetDirectories($(GameFiles), 'Managed', System.IO.SearchOption.AllDirectories))))">
+            <Output TaskParameter="Value" PropertyName="RawManagedDirs" />
+        </CreateProperty>
+        <!-- Convert the ManagedDirectories property to an ItemGroup -->
+        <CreateItem Include="$(RawManagedDirs)">
+            <Output TaskParameter="Include" ItemName="AllManagedDirs" />
+        </CreateItem>
+
+        <PropertyGroup>
+            <GameManagedPath Condition="@(AllManagedDirs->Count()) > 0">%(AllManagedDirs.Identity)</GameManagedPath>
+        </PropertyGroup>
+    </Target>
+
+    <!-- Setup PropertyGroups -->
+    <Target Name="SetupPropGroups" DependsOnTargets="FindManagedFolder">
+        <PropertyGroup>
+            <CI_PATH>$(MSBuildProjectDirectory)/libs/</CI_PATH>
+            <GameLibPath Condition="'$(ContinuousIntegration)' != 'true'">$(GameManagedPath)</GameLibPath>
+            <GameLibPath Condition="'$(ContinuousIntegration)' == 'true'">$(CI_PATH)</GameLibPath>
+        </PropertyGroup>
+    </Target>
+
+    <!-- Unzips the GameLibs on CI -->
+    <Target Name="CIUnzipLibs" Condition="'$(ContinuousIntegration)' == 'true'">
+        <RemoveDir Directories="$(CI_PATH)"/>
+        <Unzip SourceFiles="$(MSBuildProjectDirectory)/GameLibs" DestinationFolder="$(CI_PATH)" OverwriteReadOnlyFiles="true" ContinueOnError="true"/>
+    </Target>
+
+    <!-- Update the paths of GameLib references -->
+    <Target Name="UpdateGameLibPaths" BeforeTargets="ResolveAssemblyReferences" DependsOnTargets="SetupPropGroups;CIUnzipLibs">
+        <Message Importance="high" Text="Resolving ShoddyGameLib references from '$(GameLibPath)'"/>
+
+        <ItemGroup>
+            <Reference Update="@(Reference)" Condition="'%(Reference.GameLib)' == 'true' or '%(Reference.ShoddyGameLib)' == 'true'">
+                <HintPath>$(GameLibPath)/%(Reference.Identity).dll</HintPath>
+            </Reference>
+        </ItemGroup>
+    </Target>
+
+    <!-- Strip and zip on local machines build success -->
+    <Target Name="StripPostBuild" AfterTargets="Build" Condition="'$(ContinuousIntegration)' != 'true' and '$(BuildGameLibs)' == 'true'">
+        <Exec Command="dotnet tool install -g JetBrains.Refasmer.CliTool"/>
+        <MakeDir Directories="$(CI_PATH)"/>
+        <ItemGroup>
+            <GameLibReferences Include="@(Reference)" Condition="'%(Reference.GameLib)' == 'true' or '%(Reference.ShoddyGameLib)' == 'true'"/>
+        </ItemGroup>
+
+        <Message Importance="high" Text="Beginning Refasmer of @(GameLibReferences->Count()) references..."/>
+        <Exec Condition="'@(GameLibReferences)' != ''"
+              Command="refasmer --outputdir &quot;$(CI_PATH)&quot; --all --mock &quot;%(GameLibReferences.HintPath)&quot;" />
+
+        <ZipDirectory DestinationFile="$(MSBuildProjectDirectory)/GameLibs" SourceDirectory="$(CI_PATH)" Overwrite="true" />
+        <RemoveDir Directories="$(CI_PATH)"/>
+    </Target>
+
+</Project>
