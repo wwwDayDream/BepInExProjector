@@ -22,7 +22,7 @@
     <!-- Setup PropertyGroups -->
     <Target Name="SetupPropGroups" DependsOnTargets="FindManagedFolder">
         <PropertyGroup>
-            <CI_PATH>$(MSBuildProjectDirectory)/libs/</CI_PATH>
+            <CI_PATH>$(MSBuildThisFileDirectory)/libs/</CI_PATH>
             <GameLibPath Condition="'$(ContinuousIntegration)' != 'true'">$(GameManagedPath)</GameLibPath>
             <GameLibPath Condition="'$(ContinuousIntegration)' == 'true'">$(CI_PATH)</GameLibPath>
         </PropertyGroup>
@@ -31,7 +31,7 @@
     <!-- Unzips the GameLibs on CI -->
     <Target Name="CIUnzipLibs" Condition="'$(ContinuousIntegration)' == 'true'">
         <RemoveDir Directories="$(CI_PATH)"/>
-        <Unzip SourceFiles="$(MSBuildProjectDirectory)/GameLibs" DestinationFolder="$(CI_PATH)" OverwriteReadOnlyFiles="true" ContinueOnError="true"/>
+        <Unzip SourceFiles="$(MSBuildThisFileDirectory)/GameLibs" DestinationFolder="$(CI_PATH)" OverwriteReadOnlyFiles="true" ContinueOnError="true"/>
     </Target>
 
     <!-- Update the paths of GameLib references -->
@@ -57,7 +57,7 @@
         <Exec Condition="'@(GameLibReferences)' != ''"
               Command="refasmer --outputdir &quot;$(CI_PATH)&quot; --all --mock &quot;%(GameLibReferences.HintPath)&quot;" />
 
-        <ZipDirectory DestinationFile="$(MSBuildProjectDirectory)/GameLibs" SourceDirectory="$(CI_PATH)" Overwrite="true" />
+        <ZipDirectory DestinationFile="$(MSBuildThisFileDirectory)/GameLibs" SourceDirectory="$(CI_PATH)" Overwrite="true" />
         <RemoveDir Directories="$(CI_PATH)"/>
     </Target>
 
